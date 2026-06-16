@@ -4,6 +4,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import fs from "fs";
 import path from "path";
 import readline from "readline";
+import { promisify } from "util";
+import { exec } from "child_process";
+const execAsync = promisify(exec);
 
 const server = new Server(
   { name: "coder-agent-tools", version: "1.0.0" },
@@ -110,10 +113,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["filePath"]
         }
+      },
+      // Thêm vào schema tools
+      {
+        name: "append_to_file",
+        description: "Thêm đoạn code mới vào cuối file hiện có.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: { type: "string" },
+            content: { type: "string", description: "Đoạn code cần thêm vào" }
+          },
+          required: ["filePath", "content"]
+        }
       }
     ]
   };
 });
+
+
 
 // 2. Hiện thực hóa logic chạy các tác vụ
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -147,23 +165,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "patch_file": {
-        if (!fs.existsSync(args.filePath)) {
-          return { content: [{ type: "text", text: `Lỗi: File ${args.filePath} không tồn tại.` }], isError: true };
-        }
-        let currentContent = fs.readFileSync(args.filePath, "utf-8");
+        const safePath = getSafePath(args.filePath);
+        let content = fs.readFileSync(safePath, "utf-8");
 
-        // Kiểm tra xem đoạn code cũ có tồn tại chính xác trong file không
-        if (!currentContent.includes(args.oldContent)) {
-          return {
-            content: [{ type: "text", text: `Lỗi: Không tìm thấy đoạn code cũ khớp chính xác trong file để thay thế.` }],
-            isError: true
+        // Kiểm tra sự tồn tại của đoạn code cũ
+        if (!content.includes(args.oldContent)) {
+          return { 
+            content: [{ 
+              type: "text", 
+              text: "Lỗi: Không tìm thấy đoạn code cũ. Hãy dùng 'read_file_partial' để xác nhận lại nội dung file trước khi patch." 
+            }], 
+            isError: true 
           };
         }
 
-        // Tiến hành thay thế đoạn code cũ bằng code mới
-        const updatedContent = currentContent.replace(args.oldContent, args.newContent);
-        fs.writeFileSync(args.filePath, updatedContent, "utf-8");
-        return { content: [{ type: "text", text: `Đã cập nhật (patch) thành công file: ${args.filePath}` }] };
+        // Thay thế tất cả các điểm trùng khớp
+        const newContent = content.replaceAll(args.oldContent, args.newContent);
+        fs.writeFileSync(safePath, newContent, "utf-8");
+        return { content: [{ type: "text", text: "Đã cập nhật file thành công." }] };
       }
 
       case "search_code": {
@@ -239,30 +258,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "summarize_file": {
-        const { filePath } = args;
+        const safePath = getSafePath(args.filePath);
+        const content = fs.readFileSync(safePath, "utf-8");
 
-        if (!fs.existsSync(filePath)) {
-          return { content: [{ type: "text", text: `Lỗi: File ${filePath} không tồn tại.` }], isError: true };
-        }
-
-        const content = fs.readFileSync(filePath, "utf-8");
-
-        // Các regex đơn giản để trích xuất thông tin quan trọng
-        const components = content.match(/export (function|const) (\w+)/g) || [];
-        const imports = content.match(/import .* from ['"].*['"]/g) || [];
-        const lineCount = content.split('\n').length;
-
-        const summary = `
-Tóm tắt file: ${filePath}
-- Tổng số dòng: ${lineCount}
-- Các thành phần (Components/Functions) được export: ${components.join(', ') || 'Không có'}
-- Số lượng dòng import: ${imports.length}
-- Gợi ý: File này ${lineCount > 300 ? 'KHÁ LỚN, hãy dùng read_file_partial để đọc' : 'có kích thước vừa phải'}.
-`;
+        // Regex cải tiến để bắt class, interface, type, và export function
+        const definitions = content.match(/(export\s+)?(class|interface|type|function|const)\s+(\w+)/g) || [];
+        const imports = content.match(/import\s+.*?\s+from\s+['"].*?['"]/g) || [];
 
         return {
-          content: [{ type: "text", text: summary }]
+          content: [{
+            type: "text",
+            text: `Tóm tắt cấu trúc:\n- Tổng số dòng: ${content.split('\n').length}\n- Định nghĩa chính: ${definitions.join(', ')}\n- Số import: ${imports.length}`
+          }]
         };
+      }
+
+      case "append_to_file": {
+        const safePath = getSafePath(args.filePath);
+        fs.appendFileSync(safePath, `\n${args.content}`, "utf-8");
+        return { content: [{ type: "text", text: "Đã thêm code vào cuối file." }] };
+      }
+      
+      // Logic thực thi
+      case "insert_at_line": {
+        const safePath = getSafePath(args.filePath);
+        const lines = fs.readFileSync(safePath, "utf-8").split('\n');
+        const insertIndex = parseInt(args.lineNumber);
+        
+        lines.splice(insertIndex, 0, args.content);
+        fs.writeFileSync(safePath, lines.join('\n'), "utf-8");
+        return { content: [{ type: "text", text: `Đã chèn code tại dòng ${insertIndex}.` }] };
       }
 
       default:
