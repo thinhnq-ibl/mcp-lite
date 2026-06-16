@@ -118,6 +118,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["filePath"]
         }
       },
+      {
+        name: "create_file",
+        description: "Tạo một file mới. Lệnh này sẽ báo lỗi nếu file đã tồn tại để tránh ghi đè dữ liệu.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: { type: "string", description: "Đường dẫn file cần tạo" },
+            content: { type: "string", description: "Nội dung khởi tạo cho file" }
+          },
+          required: ["filePath", "content"]
+        }
+      },
       // Thêm vào schema tools
       {
         name: "append_to_file",
@@ -217,6 +229,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
         fs.writeFileSync(args.filePath, args.content, "utf-8");
         return { content: [{ type: "text", text: `Đã tạo/ghi đè file công tại: ${args.filePath}` }] };
+      }
+
+      case "create_file": {
+        const safePath = getSafePath(args.filePath);
+        
+        // Kiểm tra file đã tồn tại chưa
+        if (fs.existsSync(safePath)) {
+          return { 
+            content: [{ type: "text", text: `Lỗi: File ${args.filePath} đã tồn tại. Hãy sử dụng 'write_file' nếu bạn muốn ghi đè.` }], 
+            isError: true 
+          };
+        }
+
+        const dirPath = path.dirname(safePath);
+        if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+        
+        fs.writeFileSync(safePath, args.content, "utf-8");
+        return { content: [{ type: "text", text: `Đã tạo file thành công tại: ${args.filePath}` }] };
       }
 
       case "patch_file": {
