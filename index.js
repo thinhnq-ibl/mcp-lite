@@ -13,6 +13,10 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
+const getSafePath = (filePath) => {
+  return path.resolve(filePath);
+};
+
 // 1. Khai báo 4 năng lực cơ bản của Coder Agent với AI
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -125,6 +129,57 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             content: { type: "string", description: "Đoạn code cần thêm vào" }
           },
           required: ["filePath", "content"]
+        }
+      },
+       {
+        name: "get_file_size",
+        description: "Lấy kích thước (bằng bytes) của một tệp tin.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: { type: "string", description: "Đường dẫn tới file cần kiểm tra kích thước" }
+          },
+          required: ["filePath"]
+        }
+      },
+            // ... các tool hiện có ...
+      {
+        name: "replace_lines",
+        description: "Thay thế một đoạn dòng trong file bằng nội dung mới.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: { type: "string" },
+            startLine: { type: "number", description: "Dòng bắt đầu (từ 0)" },
+            endLine: { type: "number", description: "Dòng kết thúc" },
+            content: { type: "string", description: "Nội dung mới" }
+          },
+          required: ["filePath", "startLine", "endLine", "content"]
+        }
+      },
+      {
+        name: "delete_lines",
+        description: "Xóa một khoảng dòng trong file.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: { type: "string" },
+            startLine: { type: "number" },
+            endLine: { type: "number" }
+          },
+          required: ["filePath", "startLine", "endLine"]
+        }
+      },
+      {
+        name: "move_file",
+        description: "Đổi tên hoặc di chuyển file.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            source: { type: "string" },
+            destination: { type: "string" }
+          },
+          required: ["source", "destination"]
         }
       }
     ]
@@ -273,6 +328,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "get_file_size": {
+        const filePath = args.filePath;
+        if (!fs.existsSync(filePath)) {
+          return { content: [{ type: "text", text: `Lỗi: File ${filePath} không tồn tại.` }], isError: true };
+        }
+        try {
+            const stats = fs.statSync(filePath);
+            return { content: [{ type: "text", text: `Kích thước file ${filePath}: ${stats.size} bytes (${(stats.size / 1024).toFixed(2)} KB)` }] };
+        } catch (error) {
+            return { content: [{ type: "text", text: `Lỗi khi lấy kích thước file: ${error.message}` }], isError: true };
+        }
+      }
+
       case "append_to_file": {
         const safePath = getSafePath(args.filePath);
         fs.appendFileSync(safePath, `\n${args.content}`, "utf-8");
@@ -288,6 +356,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         lines.splice(insertIndex, 0, args.content);
         fs.writeFileSync(safePath, lines.join('\n'), "utf-8");
         return { content: [{ type: "text", text: `Đã chèn code tại dòng ${insertIndex}.` }] };
+      }
+
+            case "replace_lines": {
+        const safePath = getSafePath(args.filePath);
+        const lines = fs.readFileSync(safePath, "utf-8").split('\n');
+        lines.splice(args.startLine, args.endLine - args.startLine, args.content);
+        fs.writeFileSync(safePath, lines.join('\n'), "utf-8");
+        return { content: [{ type: "text", text: `Đã thay thế dòng ${args.startLine} đến ${args.endLine}.` }] };
+      }
+
+      case "delete_lines": {
+        const safePath = getSafePath(args.filePath);
+        const lines = fs.readFileSync(safePath, "utf-8").split('\n');
+        lines.splice(args.startLine, args.endLine - args.startLine);
+        fs.writeFileSync(safePath, lines.join('\n'), "utf-8");
+        return { content: [{ type: "text", text: `Đã xóa dòng ${args.startLine} đến ${args.endLine}.` }] };
+      }
+
+      case "move_file": {
+        const source = getSafePath(args.source);
+        const dest = getSafePath(args.destination);
+        fs.renameSync(source, dest);
+        return { content: [{ type: "text", text: `Đã chuyển ${args.source} sang ${args.destination}.` }] };
       }
 
       default:
