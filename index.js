@@ -8,6 +8,58 @@ import { promisify } from "util";
 import { exec } from "child_process";
 const execAsync = promisify(exec);
 
+class FileSystemManager {
+  getSafePath(filePath) {
+    return path.resolve(filePath);
+  }
+
+  async createDirectory(dirPath) {
+    try {
+      const safePath = this.getSafePath(dirPath);
+      if (fs.existsSync(safePath)) return { success: false, error: "Thư mục đã tồn tại." };
+      fs.mkdirSync(safePath, { recursive: true });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  async createFile(filePath, content = "") {
+    try {
+      const safePath = this.getSafePath(filePath);
+      const dir = path.dirname(safePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(safePath, content, "utf-8");
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  async deleteLines(filePath, startLine, endLine) {
+    try {
+      const safePath = path.resolve(filePath);
+      if (!fs.existsSync(safePath)) return { success: false, error: "File không tồn tại." };
+
+      const content = fs.readFileSync(safePath, "utf-8");
+      const lines = content.split('\n');
+
+      // Kiểm tra tính hợp lệ của phạm vi dòng
+      if (startLine < 0 || endLine >= lines.length || startLine > endLine) {
+        return { success: false, error: `Phạm vi dòng không hợp lệ (File có ${lines.length} dòng).` };
+      }
+
+      // Xóa các dòng từ startLine đến endLine (tính từ 0)
+      lines.splice(startLine, endLine - startLine + 1);
+
+      fs.writeFileSync(safePath, lines.join('\n'), "utf-8");
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+}
+
 const server = new Server(
   { name: "coder-agent-tools", version: "1.0.0" },
   { capabilities: { tools: {} } }
@@ -53,6 +105,42 @@ let safePath = "";
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
+      {
+        name: "delete_lines",
+        description: "Xóa một phạm vi dòng trong file code.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Đường dẫn file" },
+            startLine: { type: "number", description: "Dòng bắt đầu (tính từ 0)" },
+            endLine: { type: "number", description: "Dòng kết thúc" }
+          },
+          required: ["path", "startLine", "endLine"]
+        }
+      },
+      {
+        name: "create_dir",
+        description: "Tạo một thư mục mới trong dự án.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Đường dẫn của thư mục cần tạo" }
+          },
+          required: ["path"]
+        }
+      },
+      {
+        name: "create_file",
+        description: "Tạo một file mới với nội dung tùy chọn. Nếu thư mục cha chưa tồn tại, nó sẽ tự động tạo thư mục.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Đường dẫn file cần tạo" },
+            content: { type: "string", description: "Nội dung khởi tạo cho file" }
+          },
+          required: ["path"]
+        }
+      },
       {
         name: "run_script",
         description: "Chạy một file script Node.js hoặc lệnh shell. Hữu ích để khởi động lại server hoặc build dự án.",
@@ -167,7 +255,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["action", "path"]
         }
       },
-     {
+      {
         name: "insert_code",
         description: "Chèn code mới vào một vị trí cụ thể (theo dòng hoặc sau một chuỗi ký tự).",
         inputSchema: {
@@ -238,6 +326,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      case "delete_lines": {
+        const { path: filePath, startLine, endLine } = args;
+        const fsManager = new FileSystemManager();
+        const result = await fsManager.deleteLines(filePath, startLine, endLine);
+        
+        return result.success 
+          ? { content: [{ type: "text", text: `Đã xóa thành công các dòng từ ${startLine} đến ${endLine} trong ${filePath}` }] }
+          : { content: [{ type: "text", text: `Lỗi: ${result.error}` }], isError: true };
+      }
+      case "create_dir": {
+        const { path: dirPath } = args;
+        const manager = new FileSystemManager();
+        const result = await manager.createDirectory(dirPath);
+
+        if (!result.success) {
+          return { content: [{ type: "text", text: `Lỗi: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: `Đã tạo thư mục thành công tại: ${dirPath}` }] };
+      }
+      case "create_file": {
+        const { path: filePath, content = "" } = args;
+        const manager = new FileSystemManager();
+        const result = await manager.createFile(filePath, content);
+
+        if (!result.success) {
+          return { content: [{ type: "text", text: `Lỗi: ${result.error}` }], isError: true };
+        }
+        safePath = getSafePath(filePath);
+        return { content: [{ type: "text", text: `Đã tạo file thành công tại: ${filePath}` }] };
+      }
+
       case "run_script": {
         const { command } = args;
         try {
@@ -247,7 +366,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return { content: [{ type: "text", text: `Lỗi thực thi: ${err.message}` }], isError: true };
         }
       }
-      
+
       case "rename_file": {
         const { oldPath, newPath } = args;
         const oldSafePath = getSafePath(oldPath);
@@ -260,9 +379,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         try {
           fs.renameSync(oldSafePath, newSafePath);
           // Cập nhật lại workspace state nếu file vừa đổi tên chính là file đang làm việc
-          if (currentActiveFile === oldSafePath) {
-            currentActiveFile = newSafePath;
-          }
+          safePath = newSafePath;
           return { content: [{ type: "text", text: `Đã đổi tên thành công: ${oldPath} -> ${newPath}` }] };
         } catch (err) {
           return { content: [{ type: "text", text: `Lỗi khi đổi tên: ${err.message}` }], isError: true };
@@ -270,11 +387,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_workspace_state": {
-        return { 
-          content: [{ 
-            type: "text", 
-            text: currentActiveFile ? `Đang làm việc tại: ${currentActiveFile}` : "Chưa có file nào được chọn." 
-          }] 
+        return {
+          content: [{
+            type: "text",
+            text: currentActiveFile ? `Đang làm việc tại: ${currentActiveFile}` : "Chưa có file nào được chọn."
+          }]
         };
       }
 
@@ -304,9 +421,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         safePath = safe;
 
         if (!content.includes(oldBlock)) {
-          return { 
-            content: [{ type: "text", text: "Lỗi: Không tìm thấy khối code cần thay thế. Kiểm tra khoảng trắng và thụt lề." }], 
-            isError: true 
+          return {
+            content: [{ type: "text", text: "Lỗi: Không tìm thấy khối code cần thay thế. Kiểm tra khoảng trắng và thụt lề." }],
+            isError: true
           };
         }
 
@@ -319,25 +436,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { lines, error, path: safe } = readLines(targetPath);
         if (error) return { content: [{ type: "text", text: `Lỗi: ${error}` }], isError: true };
         safePath = safe;
-        
+
         const formatted = lines
           .slice(startLine, endLine)
           .map((line, index) => `${startLine + index + 1} | ${line}`)
           .join('\n');
-          
+
         return { content: [{ type: "text", text: formatted }] };
       }
 
       case "search_and_read": {
         const { query, contextLines = 10 } = args;
-        const cmd = `grep -rnC ${contextLines} "${query}" . --exclude-dir=node_modules | head -n 50`;
-        
+        // Sử dụng giải pháp tìm kiếm đơn giản hơn hoặc thông báo nếu không hỗ trợ grep
+        const isWindows = process.platform === "win32";
+        const cmd = isWindows 
+          ? `findstr /s /n /i /c:"${query}" *`
+          : `grep -rnC ${contextLines} "${query}" . --exclude-dir=node_modules | head -n 50`;
+
         try {
           const { stdout } = await execAsync(cmd);
           if (!stdout) return { content: [{ type: "text", text: "Không tìm thấy kết quả phù hợp." }] };
           return { content: [{ type: "text", text: stdout }] };
         } catch (err) {
-          return { content: [{ type: "text", text: "Lỗi khi tìm kiếm." }], isError: true };
+          return { content: [{ type: "text", text: "Lỗi khi tìm kiếm hoặc không tìm thấy kết quả." }], isError: true };
         }
       }
 
@@ -388,7 +509,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { lines, error, path: safe } = readLines(targetPath);
         if (error) return { content: [{ type: "text", text: `Lỗi: ${error}` }], isError: true };
         safePath = safe;
-        
+
         if (startLine < 0 || endLine >= lines.length || startLine > endLine) {
           return { content: [{ type: "text", text: `Lỗi: Phạm vi dòng không hợp lệ (File có ${lines.length} dòng).` }], isError: true };
         }
@@ -399,21 +520,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "file_system_operations": {
         const { action, path: targetPath, content } = args;
         const safe = getSafePath(targetPath || ".");
-        
+
         switch (action) {
           case "list":
             const files = fs.readdirSync(safe);
             return { content: [{ type: "text", text: `Danh sách file: ${files.join(", ")}` }] };
-            
+
           case "read":
-            const { content: fileContent, error } = readLines(targetPath);
+            const { content: fileContent, error, path: safeReadPath } = readLines(targetPath);
             if (error) return { content: [{ type: "text", text: `Lỗi: ${error}` }], isError: true };
+            safePath = safeReadPath;
             return { content: [{ type: "text", text: fileContent }] };
-            
+
           case "write":
-            fs.writeFileSync(safe, content || "", "utf-8");
+            const safeWritePath = getSafePath(targetPath);
+            fs.writeFileSync(safeWritePath, content || "", "utf-8");
+            safePath = safeWritePath;
             return { content: [{ type: "text", text: `Đã ghi file thành công: ${targetPath}` }] };
-          
+
           default:
             return { content: [{ type: "text", text: "Hành động không hợp lệ." }], isError: true };
         }
@@ -428,14 +552,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!fileData.includes(oldContent)) {
           return { content: [{ type: "text", text: "Lỗi: Không tìm thấy đoạn code cũ để thay thế." }], isError: true };
         }
-        
+
         fs.writeFileSync(safePath, fileData.replace(oldContent, newContent), "utf-8");
         return { content: [{ type: "text", text: "Patch file thành công." }] };
       }
 
       case "smart_search": {
         try {
-          const { stdout } = await execAsync(`grep -rnI "${args.query}" . --exclude-dir=node_modules`);
+          const isWindows = process.platform === "win32";
+          const cmd = isWindows 
+            ? `findstr /s /n /i /c:"${args.query}" *`
+            : `grep -rnI "${args.query}" . --exclude-dir=node_modules`;
+          const { stdout } = await execAsync(cmd);
           return { content: [{ type: "text", text: stdout || "Không tìm thấy kết quả." }] };
         } catch {
           return { content: [{ type: "text", text: "Không tìm thấy kết quả." }] };
@@ -468,7 +596,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { path: targetPath } = args;
         const safe = getSafePath(targetPath);
         if (!fs.existsSync(safe)) return { content: [{ type: "text", text: "Lỗi: File không tồn tại." }], isError: true };
-        
+        safePath = safe;
+
         try {
           const { stdout, stderr } = await execAsync(`node "${safe}"`);
           return { content: [{ type: "text", text: `Output:\n${stdout}${stderr ? `\nError:\n${stderr}` : ""}` }] };
