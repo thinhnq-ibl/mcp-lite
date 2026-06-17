@@ -54,6 +54,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
+        name: "rename_file",
+        description: "Đổi tên file hoặc di chuyển file trong hệ thống.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            oldPath: { type: "string", description: "Đường dẫn file hiện tại" },
+            newPath: { type: "string", description: "Đường dẫn file mới (tên mới)" }
+          },
+          required: ["oldPath", "newPath"]
+        }
+      },
+      {
         name: "get_workspace_state",
         description: "Kiểm tra file hiện tại đang được Agent tập trung xử lý.",
         inputSchema: { type: "object", properties: {} }
@@ -215,6 +227,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      case "rename_file": {
+        const { oldPath, newPath } = args;
+        const oldSafePath = getSafePath(oldPath);
+        const newSafePath = getSafePath(newPath);
+
+        if (!fs.existsSync(oldSafePath)) {
+          return { content: [{ type: "text", text: "Lỗi: File cũ không tồn tại." }], isError: true };
+        }
+
+        try {
+          fs.renameSync(oldSafePath, newSafePath);
+          // Cập nhật lại workspace state nếu file vừa đổi tên chính là file đang làm việc
+          if (currentActiveFile === oldSafePath) {
+            currentActiveFile = newSafePath;
+          }
+          return { content: [{ type: "text", text: `Đã đổi tên thành công: ${oldPath} -> ${newPath}` }] };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Lỗi khi đổi tên: ${err.message}` }], isError: true };
+        }
+      }
+
       case "get_workspace_state": {
         return { 
           content: [{ 
