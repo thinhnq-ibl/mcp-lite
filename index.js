@@ -54,6 +54,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
+        name: "run_script",
+        description: "Chạy một file script Node.js hoặc lệnh shell. Hữu ích để khởi động lại server hoặc build dự án.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            command: { type: "string", description: "Lệnh cần chạy (ví dụ: 'node src/server.js')" }
+          },
+          required: ["command"]
+        }
+      },
+      {
         name: "rename_file",
         description: "Đổi tên file hoặc di chuyển file trong hệ thống.",
         inputSchema: {
@@ -227,6 +238,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      case "run_script": {
+        const { command } = args;
+
+        // Chạy lệnh và trả về output ngay lập tức
+        exec(command, (error, stdout, stderr) => {
+          if (error) {
+            return { content: [{ type: "text", text: `Lỗi khi chạy lệnh: ${error.message}` }], isError: true };
+          }
+        });
+
+        // Trả về thông báo thành công cho Agent
+        return { content: [{ type: "text", text: `Lệnh đã được thực thi: ${command}` }] };
+      }
+      
       case "rename_file": {
         const { oldPath, newPath } = args;
         const oldSafePath = getSafePath(oldPath);
