@@ -240,16 +240,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case "run_script": {
         const { command } = args;
-
-        // Chạy lệnh và trả về output ngay lập tức
-        exec(command, (error, stdout, stderr) => {
-          if (error) {
-            return { content: [{ type: "text", text: `Lỗi khi chạy lệnh: ${error.message}` }], isError: true };
-          }
-        });
-
-        // Trả về thông báo thành công cho Agent
-        return { content: [{ type: "text", text: `Lệnh đã được thực thi: ${command}` }] };
+        try {
+          const { stdout, stderr } = await execAsync(command, { cwd: process.cwd() });
+          return { content: [{ type: "text", text: `Output:\n${stdout}${stderr ? `\nError:\n${stderr}` : ""}` }] };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Lỗi thực thi: ${err.message}` }], isError: true };
+        }
       }
       
       case "rename_file": {
