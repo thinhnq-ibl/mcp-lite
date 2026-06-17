@@ -8,6 +8,11 @@ import { promisify } from "util";
 import { exec } from "child_process";
 const execAsync = promisify(exec);
 
+const server = new Server(
+  { name: "coder-agent-tools", version: "1.0.0" },
+  { capabilities: { tools: {} } }
+);
+
 const getSafePath = (filePath) => path.resolve(filePath);
 
 const readLines = (filePath) => {
