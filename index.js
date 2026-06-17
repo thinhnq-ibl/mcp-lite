@@ -1,4 +1,8 @@
+// This file serves as the entry point for the 'coder-agent-tools' server.
+// It sets up and exposes various tools (file system operations, code insertion, patching, searching, execution)
+// to an external agent via the Model Context Protocol SDK over Stdio transport.
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+/* hello */
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs";
@@ -32,6 +36,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             content: { type: "string", description: "Dùng khi action là 'write'" }
           },
           required: ["action", "path"]
+        }
+      },
+     {
+        name: "insert_code",
+        description: "Chèn code mới vào một vị trí cụ thể (theo dòng hoặc sau một chuỗi ký tự).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: { type: "string" },
+            content: { type: "string", description: "Đoạn code cần chèn" },
+            anchorLine: { type: "number", description: "Chèn vào sau dòng này" },
+            anchorString: { type: "string", description: "Tìm dòng chứa chuỗi này và chèn vào sau đó" }
+          },
+          required: ["filePath", "content"]
         }
       },
       {
@@ -96,7 +114,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case "write":
             fs.writeFileSync(targetPath, content || "", "utf-8");
             return { content: [{ type: "text", text: `Đã ghi file thành công: ${targetPath}` }] };
-            
+          
           default:
             return { content: [{ type: "text", text: "Hành động không hợp lệ." }], isError: true };
         }
@@ -124,6 +142,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         } catch {
           return { content: [{ type: "text", text: "Không tìm thấy kết quả hoặc lỗi thực thi tìm kiếm." }] };
         }
+      }
+
+      case "insert_code": {
+        const safePath = getSafePath(args.filePath);
+        if (!fs.existsSync(safePath)) {
+          return { content: [{ type: "text", text: `Lỗi: File ${args.filePath} không tồn tại.` }], isError: true };
+        }
+
+        const lines = fs.readFileSync(safePath, "utf-8").split('\n');
+        let insertAt = 0;
+
+        if (args.anchorString) {
+          const foundIndex = lines.findIndex(l => l.includes(args.anchorString));
+          if (foundIndex === -1) {
+            return { content: [{ type: "text", text: `Lỗi: Không tìm thấy dòng chứa "${args.anchorString}"` }], isError: true };
+          }
+          insertAt = foundIndex + 1;
+        } else if (args.anchorLine !== undefined) {
+          insertAt = args.anchorLine + 1;
+        } else {
+          return { content: [{ type: "text", text: "Lỗi: Phải cung cấp anchorLine hoặc anchorString." }], isError: true };
+        }
+
+        lines.splice(insertAt, 0, args.content);
+        fs.writeFileSync(safePath, lines.join('\n'), "utf-8");
+        return { content: [{ type: "text", text: `Đã chèn thành công tại vị trí sau dòng ${insertAt - 1}.` }] };
       }
 
       case "execute_code": {
