@@ -107,7 +107,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         "name": "read_all_tools",
-        "description": "Liệt kê tất cả các công cụ hiện có trong hệ thống.",
+        "description": "Liệt kê tất cả các công cụ hiện có trong hệ thống. Điều kiện: Không cần tham số đầu vào.",
         "inputSchema": {
           "type": "object",
           "properties": {}
@@ -115,212 +115,212 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "delete_lines",
-        description: "Xóa một phạm vi dòng trong file code.",
+        description: "Xóa một phạm vi dòng trong file code. Điều kiện: Cần đường dẫn file chính xác và phạm vi dòng hợp lệ (tính từ 0). Nên dùng read_file_with_numbers để xác định dòng trước.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string", description: "Đường dẫn file" },
-            startLine: { type: "number", description: "Dòng bắt đầu (tính từ 0)" },
-            endLine: { type: "number", description: "Dòng kết thúc" }
+            path: { type: "string", description: "Đường dẫn tuyệt đối hoặc tương đối đến file cần xóa dòng." },
+            startLine: { type: "number", description: "Số thứ tự dòng bắt đầu xóa (0-indexed)." },
+            endLine: { type: "number", description: "Số thứ tự dòng kết thúc việc xóa." }
           },
           required: ["path", "startLine", "endLine"]
         }
       },
       {
         name: "create_dir",
-        description: "Tạo một thư mục mới trong dự án.",
+        description: "Tạo một thư mục mới. Điều kiện: Cần đường dẫn thư mục chưa tồn tại. Hỗ trợ tạo thư mục lồng nhau (recursive).",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string", description: "Đường dẫn của thư mục cần tạo" }
+            path: { type: "string", description: "Đường dẫn của thư mục cần tạo." }
           },
           required: ["path"]
         }
       },
       {
         name: "create_file",
-        description: "Tạo một file mới với nội dung tùy chọn. Nếu thư mục cha chưa tồn tại, nó sẽ tự động tạo thư mục.",
+        description: "Tạo một file mới với nội dung tùy chọn. Điều kiện: Cần đường dẫn file. Nếu thư mục cha chưa tồn tại, nó sẽ tự động tạo.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string", description: "Đường dẫn file cần tạo" },
-            content: { type: "string", description: "Nội dung khởi tạo cho file" }
+            path: { type: "string", description: "Đường dẫn file cần tạo." },
+            content: { type: "string", description: "Nội dung khởi tạo cho file (mặc định để trống)." }
           },
           required: ["path"]
         }
       },
       {
         name: "run_script",
-        description: "Chạy một file script Node.js hoặc lệnh shell. Hữu ích để khởi động lại server hoặc build dự án.",
+        description: "Chạy một file script Node.js hoặc lệnh shell. Điều kiện: Cần lệnh hợp lệ với môi trường thực thi (bash/powershell).",
         inputSchema: {
           type: "object",
           properties: {
-            command: { type: "string", description: "Lệnh cần chạy (ví dụ: 'node src/server.js')" }
+            command: { type: "string", description: "Lệnh shell cần chạy (ví dụ: 'npm test' hoặc 'node app.js')." }
           },
           required: ["command"]
         }
       },
       {
         name: "rename_file",
-        description: "Đổi tên file hoặc di chuyển file trong hệ thống.",
+        description: "Đổi tên hoặc di chuyển file. Điều kiện: File nguồn (oldPath) phải tồn tại. Đường dẫn mới (newPath) phải hợp lệ.",
         inputSchema: {
           type: "object",
           properties: {
-            oldPath: { type: "string", description: "Đường dẫn file hiện tại" },
-            newPath: { type: "string", description: "Đường dẫn file mới (tên mới)" }
+            oldPath: { type: "string", description: "Đường dẫn file hiện tại cần đổi tên/di chuyển." },
+            newPath: { type: "string", description: "Đường dẫn đích hoặc tên thư mục/file mới." }
           },
           required: ["oldPath", "newPath"]
         }
       },
       {
         name: "get_workspace_state",
-        description: "Kiểm tra file hiện tại đang được Agent tập trung xử lý.",
+        description: "Kiểm tra file hiện tại đang được Agent tập trung xử lý. Điều kiện: Không cần tham số. Giúp xác định bối cảnh làm việc hiện tại.",
         inputSchema: { type: "object", properties: {} }
       },
       {
         name: "get_function_context",
-        description: "Trích xuất nội dung của một hàm cụ thể. Có thể tùy chọn hiển thị số dòng.",
+        description: "Trích xuất nội dung của một hàm cụ thể. Điều kiện: Cần đường dẫn file và tên hàm chính xác. Phụ thuộc vào định dạng code để nhận diện cặp ngoặc.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string" },
-            functionName: { type: "string" },
-            withLineNumbers: { type: "boolean", description: "Hiển thị kèm số dòng" }
+            path: { type: "string", description: "Đường dẫn đến file chứa hàm." },
+            functionName: { type: "string", description: "Tên hàm cần trích xuất code." },
+            withLineNumbers: { type: "boolean", description: "Hiển thị kèm số dòng để dễ định vị (mặc định false)." }
           },
           required: ["path", "functionName"]
         }
       },
       {
         name: "replace_code_block",
-        description: "Thay thế một khối code cũ bằng code mới. Sử dụng khi biết rõ đoạn code cần thay đổi.",
+        description: "Thay thế một khối code cũ bằng code mới. Điều kiện: Cần file, đoạn code cũ (phải khớp chính xác từng dấu cách) và đoạn code mới.",
         inputSchema: {
           type: "object",
           properties: {
-            filePath: { type: "string" },
-            oldBlock: { type: "string", description: "Đoạn code cũ cần tìm" },
-            newBlock: { type: "string", description: "Đoạn code mới để thay thế" }
+            filePath: { type: "string", description: "Đường dẫn file cần sửa." },
+            oldBlock: { type: "string", description: "Đoạn code cũ cần tìm để thay thế." },
+            newBlock: { type: "string", description: "Đoạn code mới sẽ được ghi vào." }
           },
           required: ["filePath", "oldBlock", "newBlock"]
         }
       },
       {
         name: "read_file_with_numbers",
-        description: "Đọc file kèm theo số dòng ở đầu mỗi dòng. Giúp Agent xác định vị trí sửa code chính xác.",
+        description: "Đọc file kèm theo số dòng. Điều kiện: Cần đường dẫn file. Rất hữu ích khi cần xác định dòng cụ thể để xóa hoặc chèn code.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string" },
-            startLine: { type: "number" },
-            endLine: { type: "number" }
+            path: { type: "string", description: "Đường dẫn file cần đọc." },
+            startLine: { type: "number", description: "Dòng bắt đầu đọc (mặc định 0)." },
+            endLine: { type: "number", description: "Dòng kết thúc đọc (mặc định 100)." }
           },
           required: ["path"]
         }
       },
       {
         name: "search_and_read",
-        description: "Tìm kiếm một chuỗi trong dự án và trả về nội dung tại vị trí đó kèm theo 10 dòng xung quanh để lấy context.",
+        description: "Tìm kiếm chuỗi code trong toàn bộ dự án. Điều kiện: Cần từ khóa query. Trả về vị trí và context xung quanh (mặc định 10 dòng).",
         inputSchema: {
           type: "object",
           properties: {
-            query: { type: "string", description: "Chuỗi code hoặc từ khóa cần tìm" },
-            contextLines: { type: "number", description: "Số dòng xung quanh cần lấy (mặc định 10)" }
+            query: { type: "string", description: "Chuỗi code hoặc từ khóa cần tìm kiếm." },
+            contextLines: { type: "number", description: "Số dòng mã nguồn hiển thị xung quanh kết quả tìm thấy." }
           },
           required: ["query"]
         }
       },
       {
         name: "read_file_smart",
-        description: "Đọc nội dung file thông minh. Nếu file quá dài (>200 dòng), nó sẽ chỉ đọc 100 dòng đầu và thông báo cho AI biết tổng số dòng để AI yêu cầu đọc phần còn lại.",
+        description: "Đọc nội dung file thông minh (tự động cắt nếu quá dài). Điều kiện: Cần đường dẫn file. Ưu tiên dùng khi chưa biết độ dài file.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string" }
+            path: { type: "string", description: "Đường dẫn file cần đọc nội dung." }
           },
           required: ["path"]
         }
       },
       {
         name: "get_file_info",
-        description: "Lấy thông tin file bao gồm tổng số dòng, kích thước (bytes) và thời gian sửa đổi gần nhất.",
+        description: "Lấy metadata của file. Điều kiện: Cần đường dẫn file. Trả về thông số: size, lineCount, lastModified.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string", description: "Đường dẫn đến file cần kiểm tra" }
+            path: { type: "string", description: "Đường dẫn đến file cần kiểm tra thông tin." }
           },
           required: ["path"]
         }
       },
       {
         name: "file_system_operations",
-        description: "Quản lý file: đọc, ghi (đè/tạo mới), hoặc xem danh sách thư mục.",
+        description: "Quản lý file hệ thống: đọc, ghi, hoặc liệt kê file. Điều kiện: Cần action ('read', 'write', 'list') và path. 'write' yêu cầu có content.",
         inputSchema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["read", "write", "list"] },
-            path: { type: "string" },
-            content: { type: "string", description: "Dùng khi action là 'write'" }
+            action: { type: "string", enum: ["read", "write", "list"], description: "Hành động: đọc file, ghi đè/tạo mới, hoặc liệt kê thư mục." },
+            path: { type: "string", description: "Đường dẫn file hoặc thư mục." },
+            content: { type: "string", description: "Nội dung cần ghi (chỉ dùng khi action='write')." }
           },
           required: ["action", "path"]
         }
       },
       {
         name: "insert_code",
-        description: "Chèn code mới vào một vị trí cụ thể (theo dòng hoặc sau một chuỗi ký tự).",
+        description: "Chèn code mới vào một vị trí cụ thể. Điều kiện: Cần filePath, content và một trong hai anchor (anchorLine hoặc anchorString).",
         inputSchema: {
           type: "object",
           properties: {
-            filePath: { type: "string" },
-            content: { type: "string", description: "Đoạn code cần chèn" },
-            anchorLine: { type: "number", description: "Chèn vào sau dòng này" },
-            anchorString: { type: "string", description: "Tìm dòng chứa chuỗi này và chèn vào sau đó" }
+            filePath: { type: "string", description: "Đường dẫn file cần chèn code." },
+            content: { type: "string", description: "Đoạn mã nguồn mới cần chèn vào." },
+            anchorLine: { type: "number", description: "Số thứ tự dòng sẽ chèn mã vào sau đó." },
+            anchorString: { type: "string", description: "Chuỗi văn bản dùng làm mốc, mã sẽ được chèn vào sau dòng chứa chuỗi này." }
           },
           required: ["filePath", "content"]
         }
       },
       {
         name: "apply_patch",
-        description: "Chỉnh sửa file bằng cách thay thế nội dung cũ bằng nội dung mới. Tốt cho các file lớn.",
+        description: "Sửa file bằng cách thay thế đoạn nội dung cũ bằng mới. Điều kiện: Cần path, oldContent và newContent. Thích hợp cho file dung lượng lớn.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string" },
-            oldContent: { type: "string" },
-            newContent: { type: "string" }
+            path: { type: "string", description: "Đường dẫn file cần áp dụng patch." },
+            oldContent: { type: "string", description: "Nội dung cũ cần được thay thế." },
+            newContent: { type: "string", description: "Nội dung mới sẽ thay thế cho nội dung cũ." }
           },
           required: ["path", "oldContent", "newContent"]
         }
       },
       {
         name: "smart_search",
-        description: "Tìm kiếm code kèm theo số dòng xung quanh để lấy context.",
+        description: "Tìm kiếm mã nguồn nhanh. Điều kiện: Cần query (từ khóa). Trả về tên file và số dòng tương ứng.",
         inputSchema: {
           type: "object",
           properties: {
-            query: { type: "string" }
+            query: { type: "string", description: "Từ khóa hoặc đoạn code cần tìm kiếm." }
           },
           required: ["query"]
         }
       },
       {
         name: "execute_code",
-        description: "Chạy file JS để kiểm tra kết quả ngay lập tức.",
+        description: "Thực thi file JavaScript ngay lập tức để kiểm tra logic. Điều kiện: Cần đường dẫn file JS hợp lệ.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string" }
+            path: { type: "string", description: "Đường dẫn file .js cần chạy." }
           },
           required: ["path"]
         }
       },
       {
         name: "read_lines",
-        description: "Đọc một phạm vi dòng cụ thể trong file (giúp tiết kiệm token).",
+        description: "Đọc một phạm vi dòng cụ thể. Điều kiện: Cần path, startLine và endLine. Giúp tối ưu hóa token khi làm việc với file lớn.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string" },
-            startLine: { type: "number", description: "Dòng bắt đầu (tính từ 0)" },
-            endLine: { type: "number", description: "Dòng kết thúc" }
+            path: { type: "string", description: "Đường dẫn file." },
+            startLine: { type: "number", description: "Dòng bắt đầu đọc (0-indexed)." },
+            endLine: { type: "number", description: "Dòng kết thúc đọc." }
           },
           required: ["path", "startLine", "endLine"]
         }
@@ -459,7 +459,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "read_file_with_numbers": {
-        const { path: targetPath, startLine = 0, endLine = 1000 } = args;
+        const { path: targetPath, startLine = 0, endLine = 100 } = args;
         const { lines, error, path: safe } = readLines(targetPath);
         if (error) return { content: [{ type: "text", text: `Lỗi: ${error}` }], isError: true };
         safePath = safe;
@@ -495,12 +495,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         safePath = safe;
         const totalLines = lines.length;
 
-        if (totalLines > 200) {
-          const preview = lines.slice(0, 100).join('\n');
+        if (totalLines > 100) {
+          const preview = lines.slice(0, 50).join('\n');
           return {
             content: [{
               type: "text",
-              text: `File quá dài (${totalLines} dòng). 100 dòng đầu:\n\n${preview}\n\n[Hệ thống]: File còn ${totalLines - 100} dòng. Dùng 'read_lines' để đọc thêm.`
+              text: `File quá dài (${totalLines} dòng). 50 dòng đầu:\n\n${preview}\n\n[Hệ thống]: File còn ${totalLines - 50} dòng. Dùng 'read_lines' để đọc thêm.`
             }]
           };
         }
