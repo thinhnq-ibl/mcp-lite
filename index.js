@@ -106,6 +106,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
+        "name": "read_all_tools",
+        "description": "Liệt kê tất cả các công cụ hiện có trong hệ thống.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
         name: "delete_lines",
         description: "Xóa một phạm vi dòng trong file code.",
         inputSchema: {
@@ -326,6 +334,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      case "read_all_tools": {
+        // Lấy danh sách tool từ schema đã định nghĩa ở trên
+        // Cách đơn giản nhất là format lại danh sách công cụ hiện có
+        const toolList = [
+          "delete_lines", "create_dir", "create_file", "run_script", 
+          "rename_file", "get_workspace_state", "get_function_context",
+          "replace_code_block", "read_file_with_numbers", "search_and_read",
+          "read_file_smart", "get_file_info", "file_system_operations",
+          "insert_code", "apply_patch", "smart_search", "execute_code", "read_lines"
+        ];
+        
+        return { 
+          content: [{ 
+            type: "text", 
+            text: `Các công cụ hiện có trong hệ thống:\n- ${toolList.join('\n- ')}` 
+          }] 
+        };
+      }
+      
       case "delete_lines": {
         const { path: filePath, startLine, endLine } = args;
         const fsManager = new FileSystemManager();
