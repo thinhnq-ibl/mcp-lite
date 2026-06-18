@@ -386,7 +386,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "create_file": {
         const { path: filePath, content = "" } = args;
         const manager = new FileSystemManager();
-        const result = await manager.createFile(filePath, content);
+        
+        // Loại bỏ dấu nháy đơn bao quanh nội dung nếu Agent gửi nhầm (thường xảy ra khi AI trích dẫn code)
+        let cleanContent = content;
+        if (typeof cleanContent === "string") {
+          cleanContent = cleanContent.trim();
+          if ((cleanContent.startsWith("'") && cleanContent.endsWith("'")) || 
+              (cleanContent.startsWith("\"") && cleanContent.endsWith("\"")) ||
+              (cleanContent.startsWith("'") && cleanContent.endsWith("'")) ||
+              (cleanContent.startsWith("`") && cleanContent.endsWith("`"))) {
+            // Chỉ xóa nếu cặp ngoặc này bao toàn bộ nội dung
+            const firstChar = cleanContent[0];
+            const lastChar = cleanContent[cleanContent.length - 1];
+            if (firstChar === lastChar) {
+              cleanContent = cleanContent.substring(1, cleanContent.length - 1);
+            }
+          }
+        }
+
+        const result = await manager.createFile(filePath, cleanContent);
 
         if (!result.success) {
           return { content: [{ type: "text", text: `Lỗi: ${result.error}` }], isError: true };
@@ -580,7 +598,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
           case "write":
             const safeWritePath = getSafePath(targetPath);
-            fs.writeFileSync(safeWritePath, content || "", "utf-8");
+            let writeContent = content || "";
+            if (typeof writeContent === "string") {
+              writeContent = writeContent.trim();
+              if ((writeContent.startsWith("'") && writeContent.endsWith("'")) || 
+                  (writeContent.startsWith("\"") && writeContent.endsWith("\"")) ||
+                  (cleanContent.startsWith("`") && cleanContent.endsWith("`")) ||
+                  (writeContent.startsWith("`") && writeContent.endsWith("`"))) {
+                writeContent = writeContent.substring(1, writeContent.length - 1);
+              }
+            }
+            fs.writeFileSync(safeWritePath, writeContent, "utf-8");
             safePath = safeWritePath;
             return { content: [{ type: "text", text: `Đã ghi file thành công: ${targetPath}` }] };
 
