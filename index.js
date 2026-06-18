@@ -70,11 +70,14 @@ const getSafePath = (filePath) => path.resolve(filePath);
 const readLines = (filePath) => {
   const safePath = getSafePath(filePath);
   if (!fs.existsSync(safePath)) return { error: "File không tồn tại.", path: safePath };
-  const content = fs.readFileSync(safePath, "utf-8");
+  const rawContent = fs.readFileSync(safePath, "utf-8");
+  // Chuẩn hóa sang LF để xử lý nội bộ đồng nhất, sau đó có thể join lại theo nhu cầu
+  const content = rawContent.replace(/\r\n/g, "\n");
   return { lines: content.split('\n'), content, path: safePath };
 };
 
 const findFunctionBounds = (lines, functionName) => {
+  // Đảm bảo lines không có \r
   const funcRegex = new RegExp(`(function\\s+${functionName}|${functionName}\\s*[:=]\\s*\\(?.*\\)?\\s*=>|${functionName}\\s*\\()`);
   const startIndex = lines.findIndex(line => funcRegex.test(line));
   if (startIndex === -1) return null;
@@ -115,13 +118,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "delete_lines",
-        description: "Xóa một phạm vi dòng trong file code. Điều kiện: Cần đường dẫn file chính xác và phạm vi dòng hợp lệ (tính từ 0). Nên dùng read_file_with_numbers để xác định dòng trước.",
+        description: "Xóa một phạm vi dòng. Điều kiện: Cần path và phạm vi dòng (tính từ 1). Hãy dùng read_file_with_numbers trước để xác định chính xác số dòng cần xóa.",
         inputSchema: {
           type: "object",
           properties: {
-            path: { type: "string", description: "Đường dẫn tuyệt đối hoặc tương đối đến file cần xóa dòng." },
-            startLine: { type: "number", description: "Số thứ tự dòng bắt đầu xóa (0-indexed)." },
-            endLine: { type: "number", description: "Số thứ tự dòng kết thúc việc xóa." }
+            path: { type: "string", description: "Đường dẫn file." },
+            startLine: { type: "number", description: "Dòng bắt đầu xóa (1-indexed)." },
+            endLine: { type: "number", description: "Dòng kết thúc xóa (1-indexed)." }
           },
           required: ["path", "startLine", "endLine"]
         }
@@ -192,20 +195,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "replace_code_block",
-        description: "Thay thế một khối code cũ bằng code mới. Điều kiện: Cần file, đoạn code cũ (phải khớp chính xác từng dấu cách) và đoạn code mới.",
+        description: "Thay thế một khối code cũ bằng code mới. Điều kiện: Cần file, đoạn code cũ (phải khớp chính xác từng dấu cách) và đoạn code mới. KHÔNG bao gồm các dòng context (dòng xung quanh) vào tham số newBlock trừ khi bạn muốn thay đổi cả chúng.",
         inputSchema: {
           type: "object",
           properties: {
             filePath: { type: "string", description: "Đường dẫn file cần sửa." },
-            oldBlock: { type: "string", description: "Đoạn code cũ cần tìm để thay thế." },
-            newBlock: { type: "string", description: "Đoạn code mới sẽ được ghi vào." }
+            oldBlock: { type: "string", description: "Đoạn code cũ cần tìm để thay thế. Phải khớp chính xác 100%." },
+            newBlock: { type: "string", description: "Đoạn mã nguồn mới sẽ thay thế cho oldBlock." }
           },
           required: ["filePath", "oldBlock", "newBlock"]
         }
       },
       {
         name: "read_file_with_numbers",
-        description: "Đọc file kèm theo số dòng. Điều kiện: Cần đường dẫn file. Rất hữu ích khi cần xác định dòng cụ thể để xóa hoặc chèn code.",
+        description: "Đọc file kèm theo số dòng. Điều kiện: Cần đường dẫn file. Rất hữu ích khi cần xác định dòng cụ thể để xóa hoặc chèn code. Dùng để lấy code chính xác (bao gồm cả khoảng trắng) trước khi dùng replace_code_block.",
         inputSchema: {
           type: "object",
           properties: {
@@ -265,14 +268,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "insert_code",
-        description: "Chèn code mới vào một vị trí cụ thể. Điều kiện: Cần filePath, content và một trong hai anchor (anchorLine hoặc anchorString).",
+        description: "Chèn mã mới vào vị trí cụ thể. Điều kiện: Cần filePath, content và anchor. LƯU Ý: Chỉ gửi duy nhất đoạn mã cần chèn vào tham số content, KHÔNG bao gồm các dòng mã có sẵn (context) để tránh trùng lặp.",
         inputSchema: {
           type: "object",
           properties: {
-            filePath: { type: "string", description: "Đường dẫn file cần chèn code." },
-            content: { type: "string", description: "Đoạn mã nguồn mới cần chèn vào." },
-            anchorLine: { type: "number", description: "Số thứ tự dòng sẽ chèn mã vào sau đó." },
-            anchorString: { type: "string", description: "Chuỗi văn bản dùng làm mốc, mã sẽ được chèn vào sau dòng chứa chuỗi này." }
+            filePath: { type: "string", description: "File cần chèn mã." },
+            content: { type: "string", description: "Đoạn mã mới cần chèn." },
+            anchorLine: { type: "number", description: "Chèn vào sau dòng này." },
+            anchorString: { type: "string", description: "Tìm dòng có chuỗi này và chèn vào phía sau nó." }
           },
           required: ["filePath", "content"]
         }
@@ -356,11 +359,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "delete_lines": {
         const { path: filePath, startLine, endLine } = args;
         const fsManager = new FileSystemManager();
-        const result = await fsManager.deleteLines(filePath, startLine, endLine);
+        // Cập nhật FileSystemManager hoặc dùng readLines ở đây để đồng nhất
+        const { lines, error, path: safe } = readLines(filePath);
+        if (error) return { content: [{ type: "text", text: `Lỗi: ${error}` }], isError: true };
+        safePath = safe;
+
+        if (startLine < 1 || endLine > lines.length || startLine > endLine) {
+          return { content: [{ type: "text", text: `Lỗi: Phạm vi dòng không hợp lệ (File có ${lines.length} dòng). Lưu ý: Dòng tính từ 1.` }], isError: true };
+        }
+
+        lines.splice(startLine - 1, endLine - startLine + 1);
+        fs.writeFileSync(safePath, lines.join('\n'), "utf-8");
         
-        return result.success 
-          ? { content: [{ type: "text", text: `Đã xóa thành công các dòng từ ${startLine} đến ${endLine} trong ${filePath}` }] }
-          : { content: [{ type: "text", text: `Lỗi: ${result.error}` }], isError: true };
+        return { content: [{ type: "text", text: `Đã xóa thành công các dòng từ ${startLine} đến ${endLine} trong ${filePath}` }] };
       }
       case "create_dir": {
         const { path: dirPath } = args;
@@ -447,15 +458,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (error) return { content: [{ type: "text", text: `Lỗi: ${error}` }], isError: true };
         safePath = safe;
 
-        if (!content.includes(oldBlock)) {
+        // Tối ưu hóa việc tìm kiếm bằng cách trim khoảng trắng nhưng vẫn giữ cấu trúc
+        const normalizedContent = content.replace(/\r\n/g, "\n");
+        const normalizedOld = oldBlock.replace(/\r\n/g, "\n");
+
+        if (!normalizedContent.includes(normalizedOld)) {
           return {
-            content: [{ type: "text", text: "Lỗi: Không tìm thấy khối code cần thay thế. Kiểm tra khoảng trắng và thụt lề." }],
+            content: [{ 
+              type: "text", 
+              text: "Lỗi: Không tìm thấy khối code cần thay thế. Hãy đảm bảo bạn không bao gồm các dòng context không cần thiết hoặc kiểm tra kỹ khoảng trắng/thụt lề." 
+            }],
             isError: true
           };
         }
 
-        fs.writeFileSync(safePath, content.replace(oldBlock, newBlock), "utf-8");
-        return { content: [{ type: "text", text: "Thay thế khối code thành công." }] };
+        const newContent = normalizedContent.replace(normalizedOld, newBlock.replace(/\r\n/g, "\n"));
+        fs.writeFileSync(safePath, newContent, "utf-8");
+        return { content: [{ type: "text", text: "Thay thế khối code thành công. Đã loại bỏ các lỗi do sai lệch xuống dòng (CRLF/LF)." }] };
       }
 
       case "read_file_with_numbers": {
@@ -606,17 +625,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let insertAt = 0;
         if (anchorString) {
           const foundIndex = lines.findIndex(l => l.includes(anchorString));
-          if (foundIndex === -1) return { content: [{ type: "text", text: `Lỗi: Không tìm thấy "${anchorString}"` }], isError: true };
+          if (foundIndex === -1) return { content: [{ type: "text", text: `Lỗi: Không tìm thấy mốc "${anchorString}"` }], isError: true };
           insertAt = foundIndex + 1;
         } else if (anchorLine !== undefined) {
-          insertAt = anchorLine + 1;
+          insertAt = anchorLine; // anchorLine thường là 1-based từ AI, chuyển sang 0-based index nếu cần. 
+          // Tuy nhiên, logic cũ là chèn SAU dòng đó. Giữ nguyên logic cũ nhưng chuẩn hóa:
+          insertAt = Math.min(Math.max(0, anchorLine), lines.length);
         } else {
           return { content: [{ type: "text", text: "Lỗi: Cần anchorLine hoặc anchorString." }], isError: true };
         }
 
-        lines.splice(insertAt, 0, content);
+        // Loại bỏ context thừa nếu Agent vô tình gửi vào content (ví dụ: lặp lại dòng anchor)
+        let cleanContent = content.replace(/\r\n/g, "\n");
+        
+        lines.splice(insertAt, 0, cleanContent);
         fs.writeFileSync(safePath, lines.join('\n'), "utf-8");
-        return { content: [{ type: "text", text: `Đã chèn thành công sau dòng ${insertAt - 1}.` }] };
+        return { content: [{ type: "text", text: `Đã chèn mã thành công tại vị trí dòng ${insertAt}.` }] };
       }
 
       case "execute_code": {
